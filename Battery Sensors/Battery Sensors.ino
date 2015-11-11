@@ -3,13 +3,19 @@
  
  V2.2 19.10.2015 - first version
  
- Created by Igor Jarc <igor.jarc1@gmail.com>
- See http://iot-playground.com for details
+ Created by Arturmon <arturmon82@gmail.com>
  
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
  version 2 as published by the Free Software Foundation.
  */
+// Enable debug prints to serial monitor
+#define MY_DEBUG 
+
+// Enable and select radio type attached
+#define MY_RADIO_NRF24
+//#define MY_RADIO_RFM69
+
 #include <avr/sleep.h>    // Sleep Modes
 #include <MySensor.h>
 #include <DHT.h> 
@@ -27,97 +33,74 @@ unsigned long SLEEP_TIME = 900000; // sleep time between reads (seconds * 1000 m
 
 #define HUMIDITY_SENSOR_DIGITAL_PIN_1 4
 #define HUMIDITY_SENSOR_DIGITAL_PIN_2 5
-#define DHTTYPE_1 DHT22   // DHT 22  (AM2302), AM2321,DHT 11,DHT 21 (AM2301)
-#define DHTTYPE_2 DHT22   // DHT 22  (AM2302), AM2321,DHT 11,DHT 21 (AM2301)
-
-#define ENABLE_SENSORS_DHT_1 1
-#define ENABLE_SENSORS_DHT_2 1
-#define ENABLE_SENSORS_BARO_BMP085 0
-
 
 // when ADC completed, take an interrupt 
 EMPTY_INTERRUPT (ADC_vect);
 
-#ifdef ENABLE_SENSORS_BARO_BMP085
 Adafruit_BMP085 bmp = Adafruit_BMP085();      // Digital Pressure Sensor 
-#endif
 
-MySensor gw;
+DHT dht;
+DHT dht_2;
 
-#if ENABLE_SENSORS_DHT_1 > 0
-DHT dht(HUMIDITY_SENSOR_DIGITAL_PIN_1, DHTTYPE_1);
-#endif
-#if ENABLE_SENSORS_DHT_2  > 0
-DHT dht_2(HUMIDITY_SENSOR_DIGITAL_PIN_2, DHTTYPE_2);
-#endif
 
 byte val;
-int oldBatLevel;
+int oldBatLevel = -1;
 
-float lastTemp_1;
-float lastHum_1;
-float lastTemp_2;
-float lastHum_2;
-float lastPressure;
+float lastTemp_1 = -1;
+float lastHum_1 = -1;
+float lastTemp_2 = -1;
+float lastHum_2 = -1;
+float lastPressure = -1;
 boolean metric = false;
-#if ENABLE_SENSORS_DHT_1 > 0
 MyMessage msgHum(CHILD_ID_HUM_1, V_HUM);
 MyMessage msgTemp(CHILD_ID_TEMP_1, V_TEMP);
-#endif
-#if ENABLE_SENSORS_DHT_2 > 0
 MyMessage msgHum_2(CHILD_ID_HUM_2, V_HUM);
 MyMessage msgTemp_2(CHILD_ID_TEMP_2, V_TEMP);
-#endif
-#if ENABLE_SENSORS_BARO_BMP085  > 0
 MyMessage pressureMsg(BARO_CHILD, V_PRESSURE);
-#endif
+
+
+void presentation()  {
+  // Send the Sketch Version Information to the Gateway
+  sendSketchInfo("EgHumBarTemBat_v3", "2.3 11.11.2015"); 
+
+     // Register all sensors to gw (they will be created as child devices)
+  present(CHILD_ID_HUM_1, S_HUM);
+  present(CHILD_ID_TEMP_1, S_TEMP);
+  present(CHILD_ID_HUM_2, S_HUM);
+  present(CHILD_ID_TEMP_2, S_TEMP);
+  present(BARO_CHILD, S_BARO);
+}
+
 
 void setup()
 {
   analogReference(INTERNAL);    // use the 1.1 V internal reference for battery level measuring
-  delay(500); // Allow time for radio if power used as reset <<<<<<<<<<<<<< Experimented with good result 
+ // delay(500); // Allow time for radio if power used as reset <<<<<<<<<<<<<< Experimented with good result 
   Serial.begin(115200);
   Serial.flush();
-  Serial.println("EgHumBarTemBat_v2  2.2 19.10.2015");
+  Serial.println("EgHumBarTemBat_v3  2.3 11.11.2015");
   
-  //gw.begin(NULL,NODE_ID); // Startup and initialize MySensors library. Set callback for incoming messages. 
-  gw.begin();
+  dht.setup(HUMIDITY_SENSOR_DIGITAL_PIN_1);
+  dht_2.setup(HUMIDITY_SENSOR_DIGITAL_PIN_2);
+  metric = getConfig().isMetric;
+//  sendBatteryLevel(oldBatLevel); 
 
-
-  // Send the Sketch Version Information to the Gateway
-  gw.sendSketchInfo("EgHumBarTemBat_v2", "2.2 19.10.2015");
-
-  // Register all sensors to gw (they will be created as child devices)
-  #if ENABLE_SENSORS_DHT_1 > 0
-  gw.present(CHILD_ID_HUM_1, S_HUM);
-  gw.present(CHILD_ID_TEMP_1, S_TEMP);
-  #endif
-  #if ENABLE_SENSORS_DHT_2 > 0
-  gw.present(CHILD_ID_HUM_2, S_HUM);
-  gw.present(CHILD_ID_TEMP_2, S_TEMP);
-  #endif
-  #if ENABLE_SENSORS_BARO_BMP085 > 0
-  gw.present(BARO_CHILD, S_BARO);
-  #endif
-    
-  metric = gw.getConfig().isMetric;
-  oldBatLevel = -1;  
-  gw.sendBatteryLevel(oldBatLevel); 
-  
-  sendValue();
+//  sendValue();
 }
 
 void loop ()
 {   
-  Serial.println("------LOOP-------");
+  Serial.println("-------Send Value-------");
   sendValue();
-  gw.sleep(SLEEP_TIME); //sleep a bit
-}  // end of loop
+  Serial.println("---------Sleep----------");
+  Serial.println("---------15min----------");  
+  sleep(SLEEP_TIME); //sleep a bit
+  }  // end of loop
 
 
 void sendValue()
 {
-  gw.wait(200);
+  
     int batLevel = getBatteryLevel();
     Serial.print("oldBatLevel: ");
     Serial.println(oldBatLevel);
@@ -125,63 +108,64 @@ void sendValue()
     Serial.println(batLevel);
   if (oldBatLevel != batLevel)
   {
-    Serial.print("--Send Node");
-    gw.sendBatteryLevel(batLevel);    
+    Serial.println("Send Node Battery State");
+    sendBatteryLevel(batLevel);    
     oldBatLevel = batLevel;
   }
-  #if ENABLE_SENSORS_DHT_1 > 0
-  float temperature_1 = dht.readTemperature();
-  if (isnan(temperature_1)) {
+  
+  delay(dht.getMinimumSamplingPeriod());
+  
+  float temperature = dht.getTemperature();
+  if (isnan(temperature)) {
       Serial.println("Failed reading temperature from Temp 1");
-  } else if (temperature_1 != lastTemp_1) {
-    lastTemp_1 = temperature_1;
-    gw.send(msgTemp.set(temperature_1, 1));
-    Serial.print("Temperature: ");
-    Serial.println(temperature_1);
+  } else if (temperature != lastTemp_1) {
+    lastTemp_1 = temperature;
+    send(msgTemp.set(temperature, 1));
+    Serial.print("Temperature 1: ");
+    Serial.println(temperature);
   }
-  float humidity_1 = dht.readHumidity();
-  if (isnan(humidity_1)) {
+  float humidity = dht.getHumidity();
+  if (isnan(humidity)) {
       Serial.println("Failed reading humidity from DHT 1");
-  } else if (humidity_1 != lastHum_1) {
-      lastHum_1 = humidity_1;
-      gw.send(msgHum.set(humidity_1, 1));
-      Serial.print("Humidity: ");
-      Serial.println(humidity_1);
+  } else if (humidity != lastHum_1) {
+      lastHum_1 = humidity;
+      send(msgHum.set(humidity, 1));
+      Serial.print("Humidity 1: ");
+      Serial.println(humidity);
   }
-  #endif
-    #if ENABLE_SENSORS_DHT_2 > 0
-  float temperature_2 = dht_2.readTemperature();
-  if (isnan(temperature_2)) {
+  delay(dht.getMinimumSamplingPeriod());
+  
+  temperature = dht_2.getTemperature();
+  if (isnan(temperature)) {
       Serial.println("Failed reading temperature from Temp 2");
-  } else if (temperature_2 != lastTemp_2) {
-    lastTemp_2 = temperature_2;
-    gw.send(msgTemp_2.set(temperature_2, 1));
-    Serial.print("Temperature: ");
-    Serial.println(temperature_2);
+  } else if (temperature != lastTemp_2) {
+    lastTemp_2 = temperature;
+    send(msgTemp_2.set(temperature, 1));
+    Serial.print("Temperature 2: ");
+    Serial.println(temperature);
   }
-  float humidity_2 = dht_2.readHumidity();
-  if (isnan(humidity_2)) {
+  humidity = dht_2.getHumidity();
+  if (isnan(humidity)) {
       Serial.println("Failed reading humidity from DHT 2");
-  } else if (humidity_2 != lastHum_2) {
-      lastHum_2 = humidity_2;
-      gw.send(msgHum_2.set(humidity_2, 1));
-      Serial.print("Humidity: ");
-      Serial.println(humidity_2);
+  } else if (humidity != lastHum_2) {
+      lastHum_2 = humidity;
+      send(msgHum_2.set(humidity, 1));
+      Serial.print("Humidity 2: ");
+      Serial.println(humidity);
   }
-  #endif
-  #if ENABLE_SENSORS_BARO_BMP085 > 0
+  /*
   float pressure = bmp.readPressure()/100;
+  //float pressure = bmp.readSealevelPressure(ALTITUDE) / 100.0;
   Serial.println(pressure);
   if (isnan(pressure)) {
       Serial.println("Failed reading pressure from BMP085");
   } else if (pressure != lastPressure) {
       lastPressure = pressure;
-      gw.send(msgHum.set(pressure, 1));
+      send(msgHum.set(pressure, 1));
       Serial.print("Pressure: ");
       Serial.println(pressure);
   }
-  #endif
- 
+  */
 }
 
 // Battery measure
@@ -218,3 +202,4 @@ long readVcc() {
 
   return result;
 }
+ 
