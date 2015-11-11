@@ -1,14 +1,12 @@
 /*
- 2xDHT22, BMP085, Voltage  sensor
+ Door/Window sensor
  
- V2.2 19.10.2015 - first version
+ V1.0 - first version
  
  Created by Arturmon <arturmon82@gmail.com>
- 
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- version 2 as published by the Free Software Foundation.
+
  */
+
 // Enable debug prints to serial monitor
 #define MY_DEBUG 
 
@@ -100,7 +98,8 @@ void loop ()
 
 void sendValue()
 {
-  
+  //delay(dht.getMinimumSamplingPeriod()); 
+  wait(100); 
     int batLevel = getBatteryLevel();
     Serial.print("oldBatLevel: ");
     Serial.println(oldBatLevel);
@@ -112,8 +111,6 @@ void sendValue()
     sendBatteryLevel(batLevel);    
     oldBatLevel = batLevel;
   }
-  
-  delay(dht.getMinimumSamplingPeriod());
   
   float temperature = dht.getTemperature();
   if (isnan(temperature)) {
@@ -133,8 +130,6 @@ void sendValue()
       Serial.print("Humidity 1: ");
       Serial.println(humidity);
   }
-  delay(dht.getMinimumSamplingPeriod());
-  
   temperature = dht_2.getTemperature();
   if (isnan(temperature)) {
       Serial.println("Failed reading temperature from Temp 2");
@@ -202,4 +197,3 @@ long readVcc() {
 
   return result;
 }
- 
