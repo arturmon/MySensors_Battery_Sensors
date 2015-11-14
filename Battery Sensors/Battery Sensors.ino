@@ -99,7 +99,7 @@ void loop ()
 void sendValue()
 {
   //delay(dht.getMinimumSamplingPeriod()); 
-  wait(100); 
+  wait(130); 
     int batLevel = getBatteryLevel();
     Serial.print("oldBatLevel: ");
     Serial.println(oldBatLevel);
