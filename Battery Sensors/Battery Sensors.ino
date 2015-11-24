@@ -1,7 +1,7 @@
 /*
- Door/Window sensor
+ weather_station_v3 sensor
  
- V1.0 - first version
+ V2.5 - first version
  
  Created by Arturmon <arturmon82@gmail.com>
 
@@ -23,11 +23,13 @@
 
 unsigned long SLEEP_TIME = 900000; // sleep time between reads (seconds * 1000 milliseconds)
 
-#define CHILD_ID_HUM_1 0
-#define CHILD_ID_TEMP_1 1
-#define CHILD_ID_HUM_2 2
-#define CHILD_ID_TEMP_2 3
-#define BARO_CHILD 4
+#define BARO_CHILD 0
+#define CHILD_ID_HUM_1 1
+#define CHILD_ID_TEMP_1 2
+#define CHILD_ID_HUM_2 3
+#define CHILD_ID_TEMP_2 4
+
+
 
 #define HUMIDITY_SENSOR_DIGITAL_PIN_1 4
 #define HUMIDITY_SENSOR_DIGITAL_PIN_2 5
@@ -57,9 +59,11 @@ MyMessage msgTemp_2(CHILD_ID_TEMP_2, V_TEMP);
 MyMessage pressureMsg(BARO_CHILD, V_PRESSURE);
 
 
+
+
 void presentation()  {
   // Send the Sketch Version Information to the Gateway
-  sendSketchInfo("EgHumBarTemBat_v3", "2.3 11.11.2015"); 
+  sendSketchInfo("weather_station_v3", "2.5 24.11.2015"); 
 
      // Register all sensors to gw (they will be created as child devices)
   present(CHILD_ID_HUM_1, S_HUM);
@@ -73,11 +77,12 @@ void presentation()  {
 void setup()
 {
   analogReference(INTERNAL);    // use the 1.1 V internal reference for battery level measuring
- // delay(500); // Allow time for radio if power used as reset <<<<<<<<<<<<<< Experimented with good result 
+  delay(500); // Allow time for radio if power used as reset <<<<<<<<<<<<<< Experimented with good result 
   Serial.begin(115200);
   Serial.flush();
-  Serial.println("EgHumBarTemBat_v3  2.3 11.11.2015");
-  
+  Serial.println("weather_station_v3  2.5 24.11.2015");
+  Serial.print("CPU SPEED:");
+  Serial.println(F_CPU );
   dht.setup(HUMIDITY_SENSOR_DIGITAL_PIN_1);
   dht_2.setup(HUMIDITY_SENSOR_DIGITAL_PIN_2);
   metric = getConfig().isMetric;
@@ -89,29 +94,20 @@ void setup()
 void loop ()
 {   
   Serial.println("-------Send Value-------");
-  sendValue();
+  sendBatteryLevelToNode();
+  wait(dht.getMinimumSamplingPeriod());
+  sendValue_DHT1();
+  wait(dht.getMinimumSamplingPeriod());
+  sendValue_DHT2();
+  sendValue_BMP();
   Serial.println("---------Sleep----------");
-  Serial.println("---------15min----------");  
   sleep(SLEEP_TIME); //sleep a bit
   }  // end of loop
 
 
-void sendValue()
+void sendValue_DHT1()
 {
-  //delay(dht.getMinimumSamplingPeriod()); 
-  wait(130); 
-    int batLevel = getBatteryLevel();
-    Serial.print("oldBatLevel: ");
-    Serial.println(oldBatLevel);
-    Serial.print("BatLevel: ");
-    Serial.println(batLevel);
-  if (oldBatLevel != batLevel)
-  {
-    Serial.println("Send Node Battery State");
-    sendBatteryLevel(batLevel);    
-    oldBatLevel = batLevel;
-  }
-  
+     // delay(dht.getMinimumSamplingPeriod());
   float temperature = dht.getTemperature();
   if (isnan(temperature)) {
       Serial.println("Failed reading temperature from Temp 1");
@@ -122,7 +118,7 @@ void sendValue()
     Serial.println(temperature);
   }
   float humidity = dht.getHumidity();
-  if (isnan(humidity)) {
+    if (isnan(humidity)) {
       Serial.println("Failed reading humidity from DHT 1");
   } else if (humidity != lastHum_1) {
       lastHum_1 = humidity;
@@ -130,7 +126,11 @@ void sendValue()
       Serial.print("Humidity 1: ");
       Serial.println(humidity);
   }
-  temperature = dht_2.getTemperature();
+} 
+
+void sendValue_DHT2()
+{
+    float temperature = dht_2.getTemperature();
   if (isnan(temperature)) {
       Serial.println("Failed reading temperature from Temp 2");
   } else if (temperature != lastTemp_2) {
@@ -139,7 +139,7 @@ void sendValue()
     Serial.print("Temperature 2: ");
     Serial.println(temperature);
   }
-  humidity = dht_2.getHumidity();
+  float humidity = dht_2.getHumidity();
   if (isnan(humidity)) {
       Serial.println("Failed reading humidity from DHT 2");
   } else if (humidity != lastHum_2) {
@@ -148,7 +148,10 @@ void sendValue()
       Serial.print("Humidity 2: ");
       Serial.println(humidity);
   }
-  /*
+}
+
+void sendValue_BMP()
+{
   float pressure = bmp.readPressure()/100;
   //float pressure = bmp.readSealevelPressure(ALTITUDE) / 100.0;
   Serial.println(pressure);
@@ -160,8 +163,24 @@ void sendValue()
       Serial.print("Pressure: ");
       Serial.println(pressure);
   }
-  */
 }
+
+
+// Send Battery measure
+void sendBatteryLevelToNode(){
+    int batLevel = getBatteryLevel();
+    Serial.print("oldBatLevel: ");
+    Serial.println(oldBatLevel);
+    Serial.print("BatLevel: ");
+    Serial.println(batLevel);
+  if (oldBatLevel != batLevel)
+  {
+    Serial.println("Send Node Battery State");
+    sendBatteryLevel(batLevel);    
+    oldBatLevel = batLevel;
+  }
+}
+
 
 // Battery measure
 int getBatteryLevel () 
@@ -197,3 +216,4 @@ long readVcc() {
 
   return result;
 }
+
